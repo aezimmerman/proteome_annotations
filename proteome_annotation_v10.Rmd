@@ -1,0 +1,599 @@
+---
+title: 'Community Proteome Annotation: Identifying possible parent proteins and consolidating annotations'
+author: "AEZ"
+date: \`r format(Sys.Date(), "%Y %m %d")`\
+output: html_document
+---
+
+### Summary  
+The purpose of these scripts recruit and consolidate peptide annotations from a protein sequence (or short read sequence) database by identifying all possible parent sequences for each peptide and retuning the top two most frequent values for either/both taxonomic and functional annotations. These scripts were developed for anlysis of community proteome samples from Station ALOHA.
+
+*NOTE: This is the most recent version.*
+
+
+Example data provided.  
+  
+Above scripts executed the following:  
+1. Read and format peptide data  
+    i) PSM level output from MorpheusFromAnotherPlace or ProteomeDiscoverer   
+2. Get list of unique peptides  
+3. Use peptide list to recruit sequence IDs from protein fasta database  
+    i) Generate long table of unique peptide-protein matches  
+4. Import annotations for protein fasta database  
+5. Join annotations to peptide-protein table by sequence ID  
+6. Consolidate functional and taxonomic annotations by peptide to top two most frequent values among all possible parent proteins  
+7. Recruit complete lineage information for top1 and top2 taxa per peptide  
+8. Resolved ambiguous taxonomy my recruiting lineage for lowest common ancestor  
+  
+  
+***
+  
+##### Load appropriate packages  
+```{r load-libraries, message=FALSE, warning=TRUE}
+## all packages installed, but limma, puma, and Biobase needed to be installed using Bioconductor
+## BiocManager::install("Biostrings")
+library("plyr")
+library("dplyr")
+library("tidyverse")
+library("seqinr")
+library("AhoCorasickTrie")
+library("ggplot2")
+library("purrr")
+library("httr")
+library("jsonlite")
+```
+  
+
+***
+
+<br/>
+
+***  
+
+
+### Get PSM results  
+  
+Import peptide-level output from MorpheusFromAnotherPlace, ProteomeDiscoverer, or similar program.  
+  
+
+#### Read and format experiment data   
+  
+*NOTE: Since Isoleucine and Leucine residues cannot be distinguished in mass spectra, change all I --> L while reading data in.*   
+  
+```{r expt_in}
+## set environment wd and path
+#setwd("./annotation_scripts/proteome_annotations")
+dirpath = "./example_PSM"
+
+# read tsv data into a list, one entry for each file
+files <- dir(dirpath, pattern="_PSMs.txt")
+
+PSM_list1 <- list()
+
+## Parses information in filename
+## Also replaces all Isoleucines with Leucines (I --> L)
+## Retains original peptide spectrum match
+for(i in 1:length(files) ) {
+  shortname <- gsub("^HOT311_(Exp[0-9]+_T[0-9]+_[BC][0-9-]+_[a-zA-Z0-9]{6,7}_AEZ_[0-9]{6}_PSMs).txt", "\\1", files[i])
+  expt_time_bot_nit_aez_date_type = unlist(strsplit(shortname, "_"))
+  PSM_list1[[i]] <- read.table(file=file.path(dirpath, files[i]), sep = "\t", 
+                                           header=TRUE, stringsAsFactors = FALSE, quote = "\"", 
+                                           fill = FALSE, na.strings = "") %>% 
+    dplyr::select(Annotated.Sequence, PSM.Ambiguity, Modifications, Number.of.Proteins, Number.of.Missed.Cleavages, Charge, Delta.Score, Delta.Cn, Rank, Search.Engine.Rank, mz.in.Da, MHplus.in.Da, Delta.M.in.ppm, Delta.mz.in.Da, Isolation.Interference.in.Percent, Ion.Inject.Time.in.ms, RT.in.min, First.Scan, XCorr, Percolator.q.Value, Percolator.PEP) %>%
+    setNames(c("annot_seq", "PSM_ambig", "mods", "num_prot", "num_missed_cleavages", "charge", "delta_score", "delta_Cn", "rank", "Search_rank", "mz_Da", "MHplus_Da", "Delta_M_ppm", "Delta_mz_Da", "Isolation_interference", "Ion_inject", "RT_min", "First_scan", "XCorr", "Perc_qVal", "Perco_PEP")) %>% 
+    mutate(expt = factor(expt_time_bot_nit_aez_date_type[1], levels = c("Exp1","Exp2")),
+           timepoint = factor(expt_time_bot_nit_aez_date_type[2], levels = c("T0","T1","T2","T3","T4")),
+           treatment = factor(expt_time_bot_nit_aez_date_type[4], levels = c("initial", "control", "15ammo", "15nitr", "15urea", "15glut", "15leuc")),
+           bottle = factor(expt_time_bot_nit_aez_date_type[3], levels = c(paste0("B", 1:88), "C5-6", "C5-7", "C5-1", "C5-2")),
+           type = factor(expt_time_bot_nit_aez_date_type[7], levels = c("PSMs")),
+           timepointNum = as.numeric(as.character(gsub("T(\\d+)","\\1",timepoint))),
+           orig_peptide = toupper(annot_seq),
+           peptide = str_replace_all(orig_peptide, "I", "L"),
+           incubation = as.numeric(as.character(plyr::revalue(timepoint, c("T0"="0", "T1"="2", "T2"="4", "T3"="8", "T4"="11"))))) %>%
+    unite("sampleID", treatment, timepoint, bottle, type, sep = "_", remove = FALSE)
+}
+```
+   
+  
+Filter out peptides with X residues.  
+  
+```{r}
+## Convert from list object to data.frame
+## Remove any peptide sequences with ambiguous "X" residues
+PSMs <- bind_rows(PSM_list1) %>%
+  dplyr::filter(stringr::str_detect(peptide, 'X|x', negate = TRUE))
+```
+  
+  
+#### Generate and export peptide list  
+  
+Should be a list of only unique peptide sequences detected.  
+  
+```{r}
+## Output directory
+#setwd("./annotation_scripts/proteome_annotations")
+
+###### write output to file ###### 
+PSMs %>%
+  select(peptide) %>%
+  distinct(peptide) %>%
+  arrange(peptide) %>%
+  write.table(., file = paste("./output/peptides_",format(Sys.time(), "%Y-%m-%d"),".txt", sep = ""), quote = FALSE, row.names = FALSE, col.name = FALSE, sep = "\t")
+```
+
+
+***
+
+<br/>
+
+***
+
+### Import fasta database and search for parent sequences  
+   
+  
+#### Read in fasta database  
+  
+*NOTE: Very large databases may take significant time to read in.*    
+  
+```{r fasta_in}
+#setwd("./annotation_scripts/proteome_annotations")
+
+## example FASTA has 16 sequences
+## list object
+test.fasta <- read.fasta(file = "./ref/test.fasta", seqtype = "AA", as.string = TRUE, strip.desc = TRUE)
+
+```
+  
+  
+#### Modify database  
+  
+*NOTE: All Isoleucine residues in protein database must be replaced with Leucine residues to match peptide modification prior to search for possible parent sequences.*  
+  
+```{r}
+## Assign to new variable prior to modification
+test.fasta.mod <- test.fasta
+
+## Change all I --> L in amino acid sequences
+## Remove all asterisks (stop codons)
+for (i in 1:length(test.fasta.mod)){
+  test.fasta.mod[[i]][1] <- gsub("I", "L", test.fasta.mod[[i]][1], ignore.case = TRUE)
+  test.fasta.mod[[i]][1] <- gsub("\\*", "", test.fasta.mod[[i]][1], ignore.case = TRUE)
+}
+
+```
+  
+
+
+***
+  
+<br/>
+
+***
+
+### Identify all possible parents for each distinct peptide sequence  
+  
+Use a non-redundant list of peptide sequences as the query.  
+  
+*NOTE: String search of peptides against database may need to be executed on RCC or other high performance computing environment.*  
+  
+  
+```{r}
+## Use AhoCorasick algorithm to search each peptide string against the database
+## Returns a matrix of all sequence matches by sequence ID
+filtpepToProt <- AhoCorasickTrie::AhoCorasickSearch(PSMs$peptide, unlist(test.fasta.mod), alphabet = "aminoacid", groupByKeyword = TRUE)
+
+## Reformat results
+filtpepToProt <- as.matrix(unlist(filtpepToProt))
+filtpepToProt <- cbind(filtpepToProt, rownames(filtpepToProt))
+
+## Generate data.frame
+## Each row is a unique peptide - protein sequence ID combination
+## The number of rows per peptide indicates how many possible parents sequences were identified
+filtpepToProt.all.long <- as.data.frame(filtpepToProt) %>%
+  filter(grepl("Text",V2)) %>% 
+  mutate(peptide = gsub("\\.Text","",V2), protID = as.character(V1), V1 = NULL, V2 = NULL) 
+
+###### write output to file ###### 
+write.table(filtpepToProt.all.long, file = paste("./output/filtpepToProt_all_long_", format(Sys.time(), "%Y-%m-%d"), ".txt", sep = ""), quote = FALSE, row.names = FALSE, sep = "\t")
+
+```
+
+
+
+  
+***
+
+<br/>
+
+*** 
+
+### Import annotations for protein fasta database  
+   
+Annotation table should be arranged so that each row represents a unique sequence ID from the database. Here, functional and taxonomic annotations were imported from separate data tables, but they may be imported in a single master annotation table.  
+  
+```{r Read-reference-data}
+## Import functional annotations
+annot.tab <- read.table(file = "./ref/test_nonredundant.annot", header = TRUE, sep = "\t", stringsAsFactors = FALSE, quote = "\"", na.strings = "", fill = TRUE)
+
+## Import taxonomic annotations
+## Must include NCBI taxID as a variable
+taxa.tab <- read.table(file = "./ref/test.blastp_accessions", header = TRUE, sep = "\t", quote = "", strip.white = TRUE, fill = TRUE, stringsAsFactors = FALSE)
+
+```
+
+
+  
+***
+
+<br/>
+
+*** 
+
+### Recruit annotations for all possible parents for each distinct peptide sequence  
+  
+#### Add functional annotations to peptide-protein table  
+  
+NA values will be introduced for any protein sequence IDs that are missing from the annotation table  
+  
+```{r add-fasta-annotations}
+## "protID" and "X" both indicate sequence ID's from the protein database
+## Add functional annotations
+annot.long <- left_join(filtpepToProt.all.long, annot.tab, by = c("protID" = "X"))
+
+## If in separate table, also add taxonomic annotations
+annot.long <- left_join(annot.long, taxa.tab, by = c("protID" = "queryID"))
+
+###### write output to file ######
+write.table(annot.long, file = paste("./output/annot_long_",format(Sys.time(), "%Y-%m-%d"),".txt", sep = ""), quote = FALSE, row.names = FALSE, sep = "\t")
+```
+
+
+
+
+<br/>
+
+***
+
+<br/>
+
+### Determine consensus functional annotations  
+  
+Consolidate functional annotations associated with all possible protein parent sequences for each peptide by returning only the top two most frequent values and the proportion of all possible parent sequences these values represent.  
+  
+  
+#### Declare function to return top annotation values  
+  
+Processes data by peptide and returns the two most frequent values and associated percentages from all possible parent sequences.  
+Uses NA values (e.g., missing annotations are not ignored).  
+If all values are the same, returns only one value and percentage (100%).  
+If top two values have equal frequency, checks for NA and returns NA as the secondary value.  
+If top two values have equal frequency and neither is NA, returns both with "ambiguous" flag.  
+  
+    
+```{r revised_consolidate_annot_function}
+## returns two most frequent values with associated percentages
+## uses NA values (e.g., NA values not ignored)
+## if all values agree, returns only one value and percentage
+## if top 2 values are tied, checks for NAs and returns NA and 2nd top match
+## if top 2 values are tied and neither is NA, returns "ambiguous" and percentages
+getTopAnnot_matrix <- function(x) {
+    d <- table(x, useNA = "ifany") %>% sort(., decreasing=TRUE) %>% as.data.frame(.)
+    if (length(d) == 1) { ## if there is only one value
+      colnames(d) <- c("Freq")
+      d <- tibble::rownames_to_column(d, "Name")
+      tot = sum(d$Freq)
+      d <- d %>% mutate(Pct = as.numeric((Freq/sum(Freq))*100), 
+                        Name = as.character(Name)) %>%
+        mutate(Pct = as.numeric(format(round(Pct, 2), nsmall = 2)))
+        y <- paste(d$Name[1], d$Pct[1], NA, 0, sep = ";;") ## to distinguish that all values agreed
+    }
+    else {
+      colnames(d) <- c("Name", "Freq")
+      tot = sum(d$Freq)
+      d <- d %>% mutate(Pct = as.numeric((Freq/sum(Freq))*100), Name = as.character(Name)) %>%
+        mutate(Pct = as.numeric(format(round(Pct, 2), nsmall = 2)))
+      if (d$Pct[1] == d$Pct[2]) {
+        if (is.na(d$Name[1])) {
+          y <- paste(d$Name[2], d$Pct[2], d$Name[1], d$Pct[1], sep = ";;") ## print NA as 2nd rank
+          }
+        else if (is.na(d$Name[2])) {
+          y <- paste(d$Name[1], d$Pct[1], d$Name[2], d$Pct[2], sep = ";;")
+        }
+        else {
+          pp1 <- paste("ambig", d$Name[1], sep="_")
+          pp2 <- paste("ambig", d$Name[2], sep="_")
+          y <- paste(pp1, d$Pct[1], pp2, d$Pct[2], sep = ";;") ## when top 2 equally split
+        }
+        }
+      else {
+        y <- paste(d$Name[1], d$Pct[1], d$Name[2], d$Pct[2], sep = ";;") 
+      }
+    }
+  return(y)
+}
+```
+  
+  
+#### Apply function to all relevant annotations variables  
+  
+```{r consolidate_annot}
+## Execute function
+annot.mod <- annot.long %>% 
+  group_by(peptide) %>%
+  summarise(n_pp = n(), nd.protID = n_distinct(protID), nd.taxID = n_distinct(taxID), 
+            top.taxID = getTopAnnot_matrix(taxID),
+            top.function = getTopAnnot_matrix(function.), 
+            top.prot.top.description = getTopAnnot_matrix(prot.top.description), 
+            top.ko = getTopAnnot_matrix(ko),
+            .groups = "keep") %>% as.data.frame(.) %>%
+  ## parse returned values
+  separate(., top.taxID, c("top1_taxID", "top1_taxID_Pct", "top2_taxID", "top2_taxID_Pct"), sep = ";;", remove = TRUE, extra = "warn", fill = "warn") %>%
+  separate(., top.function, c("top1_function", "top1_function_Pct", "top2_function", "top2_function_Pct"), sep = ";;", remove = TRUE, extra = "warn", fill = "warn") %>%
+  separate(., top.prot.top.description, c("top1_description", "top1_description_Pct", "top2_description", "top2_description_Pct"), sep = ";;", remove = TRUE, extra = "warn", fill = "warn") %>%
+  separate(., top.ko, c("top1_ko", "top1_ko_Pct", "top2_ko", "top2_ko_Pct"), sep = ";;", remove = TRUE, extra = "warn", fill = "warn") %>%
+  mutate(top1_taxID_Pct = as.numeric(top1_taxID_Pct), top2_taxID_Pct = as.numeric(top2_taxID_Pct)) %>%
+  mutate_all(na_if, "NA")
+
+
+###### write output to file ######
+write.table(annot.mod, file = paste("./output/peptide_annot_mod_",format(Sys.time(), "%Y-%m-%d"),".txt", sep = ""), quote = FALSE, row.names = FALSE, sep = "\t")
+
+```
+
+
+
+<br/>
+
+***
+
+<br/>
+
+### Get KO functional descriptions  
+  
+Generate table of functional/pathway information for KO terms.    
+  
+```{r}
+## Import KO information
+## Convert json object into nested tibble
+KO_tib <- fromJSON("./ref/ko00001.json") %>% 
+  map_if(is.data.frame, list) %>% 
+  as_tibble()
+
+# Unnest each level of the tibble, making sure the names are unique
+KO_df <- KO_tib %>% 
+  unnest(cols = c(children), names_repair = "unique") %>%
+  unnest(cols = c(children), names_repair = "unique") %>%
+  unnest(cols = c(children), names_repair = "unique") %>%
+  unnest(cols = c(children), names_repair = "unique") %>% 
+  mutate("name...1" = NULL) %>%
+  rename(c("A" = "name...2", "B" = "name...3", "C" = "name...4", "D" = "name...5"))
+
+KO_df <- KO_df %>% 
+  mutate(Term = D) %>%
+  separate(Term, c("KO_entry", "KO_desc"), sep="(?<=^K[0-9]{5} )") %>%
+  separate(KO_desc, c("KO_name", "KO_EC"), sep=" \\[", extra = "merge") %>%
+  mutate(KO_EC = str_replace(KO_EC, pattern = "]", replacement = "")) %>%
+  separate(KO_name, c("KO_name", "KO_def"), sep="; ", extra = "merge")
+
+## Trim whitespace
+KO_df$KO_entry <- trimws(KO_df$KO_entry, which = c("right"))
+
+
+###### write output to file ######
+write.table(KO_df, file = paste("./output/KEGG_KO_df_",format(Sys.time(), "%Y-%m-%d"),".txt", sep = ""), quote = FALSE, row.names = FALSE, sep = "\t")
+
+```
+
+
+
+<br/>
+  
+***
+  
+<br/>
+
+### Get complete ranked lineage information  
+  
+Complete ranked lineage information is useful for aggregating taxonomy at different levels of taxonmic resolution for analysis.  
+  
+Use JGI's Taxonomy Server to return complete ranked lineage information associated with each tax_ID. Note that a comma-delimited list of tax_IDs can be used with this function to return the lineage information of the lowest common ancestor for a set of multiple tax_IDs.   
+  
+Instructions:    
+  
+All web addresses below are assumed to be prefixed by https://taxonomy.jgi-psf.org, e.g. /name/homo_sapiens implies a full URL of: https://taxonomy.jgi-psf.org/name/homo_sapiens  
+  
+Comma-delimited lists are accepted for bulk queries, such as tax/gi/1234,7000,42  
+  
+Adding "pt" returns plain text (non-Json) results, pt returns the taxID:  
+https://taxonomy.jgi-psf.org/pt/id/ancestor/1234,5678,42  
+  
+Adding "sc" returns plain text (non-Json) results, sc returns the whole lineage, semicolon-delimited:  
+https://taxonomy.jgi-psf.org/sc/id/ancestor/1234,5678,42  
+  
+Adding "ancestor" returns the common ancestor of multiple organisms:  
+https://taxonomy.jgi-psf.org/id/ancestor/767892,1986632,1986632,1986632,1986632,62654,62654,1986632,1986632,767892
+
+*NOTE: Packages "httr" and "jsonlite" should already be loaded in the environment.*  
+  
+  
+#### Declare function to query JGI Taxonomy Server  
+  
+Takes in a semicolon-delimited list of taxIDs associated with each peptide, generates an API query, returns only the lineage of the lowest common ancestor (or the lineage of a single organism if one taxID was submitted).    
+  
+Function revised to shorten the list of query taxIDs by retaining only unique values (avoids 'status error').      
+Function revised to parse lineage from API output rather than relying on rankedlineages.dmp file from NCBI (which includes incomplete lineage information).  
+Function revised to return the name and level of the lca (previously just returned the tax_id and the lineage).  
+Checks for error in query prior to parsing the result.  
+  
+*NOTE: Peptides with "ambiguous" taxID assignments (i.e., top two values equally abundant among all possible parent sequences) handled separately below.*      
+  
+```{r getlca_func_plus_matrix}
+## Current working version:
+getLCA_plus_matrix <- function(x) {
+  taxIDs <- unlist(x) %>% na_if(., "NA") %>% .[!is.na(.)] %>% unique(.) %>% paste0(., collapse = ",")
+  if(taxIDs == "") {
+    lca <- NA
+  }
+  else if(str_detect(taxIDs, "ambig_")) { ## retain "ambiguous" flag
+    lca <- taxIDs
+    }
+  else {
+    res <- GET(paste0("https://taxonomy.jgi-psf.org/id/ancestor/", taxIDs, collapse = "")) ## query
+    status <- res[["status_code"]]
+    if(status == 200) { 
+      dat <- fromJSON(rawToChar(res$content))
+      tax_ID <- dat[["tax_id"]]
+      name <- dat[["name"]]
+      level <- dat[["level"]]
+      strain <- dat[["strain"]][["name"]]
+      species <- dat[["species"]][["name"]]
+      species_group <- dat[["species group"]][["name"]]
+      subgenus <- dat[["subgenus"]][["name"]]
+      genus <- dat[["genus"]][["name"]]
+      subfamily <- dat[["subfamily"]][["name"]]
+      family <- dat[["family"]][["name"]]
+      order <- dat[["order"]][["name"]]
+      subclass <- dat[["subclass"]][["name"]]
+      class <- dat[["class"]][["name"]]
+      phylum <- dat[["phylum"]][["name"]]
+      no_rank <- dat[["no rank"]][["name"]]
+      no_rank_2 <- dat[["no rank 2"]][["name"]]
+      kingdom <- dat[["kingdom"]][["name"]]
+      superkingdom <- dat[["superkingdom"]][["name"]]
+      lca <- paste(tax_ID, name, level, strain, species, species_group, subgenus, genus,
+                    subfamily, family, order, subclass, class, phylum, no_rank, 
+                    no_rank_2, kingdom, superkingdom, sep = "; ")
+    }
+    else {
+      lca <- "status error"
+    }
+  }
+  return(lca)
+}
+```
+    
+    
+#### Execute function to query JGI Taxonomy Server  
+  
+```{r}
+## Get completed ranked lineage using the taxID from consoliated values
+annot.mod.lineage <- annot.mod %>%
+  mutate(top1_lineage = as.character(lapply(top1_taxID, getLCA_plus_matrix)),
+         top2_lineage = as.character(lapply(top2_taxID, getLCA_plus_matrix))) %>%
+  mutate_at(vars(top1_lineage, top2_lineage), na_if, "NA") %>%
+## parse results
+   separate(., top1_lineage, c("top1_taxID_chk", "top1_name", "top1_level", "top1_strain", 
+                               "top1_species", "top1_species_group", "top1_subgenus", 
+                               "top1_genus", "top1_subfamily", "top1_family", "top1_order", 
+                               "top1_subclass", "top1_class", "top1_phylum", "top1_no_rank", 
+                               "top1_no_rank_2", "top1_kingdom", "top1_superkingdom"), 
+            sep=";", remove=TRUE, extra = "warn", fill = "warn") %>%
+  separate(., top2_lineage, c("top2_taxID_chk", "top2_name", "top2_level", "top2_strain", 
+                               "top2_species", "top2_species_group", "top2_subgenus", 
+                               "top2_genus", "top2_subfamily", "top2_family", "top2_order", 
+                               "top2_subclass", "top2_class", "top2_phylum", "top2_no_rank", 
+                               "top2_no_rank_2", "top2_kingdom", "top2_superkingdom"), 
+            sep=";", remove=TRUE, extra = "warn", fill = "warn") %>%
+    mutate(top1_superkingdom = ifelse(top1_taxID_chk == 1, "Life", top1_superkingdom),
+           top2_superkingdom = ifelse(top2_taxID_chk == 1, "Life", top2_superkingdom))
+
+```
+  
+    
+
+#### Resolve ambiguous taxonomic annotations  
+  
+Revise ambiguous peptide annotations by finding the lowest common ancestor of the two most frequent taxID's associated with all possible parent protein sequences.  
+  
+  
+##### Declare modified function for JGI Taxonomy Server  
+   
+  
+```{r resolve_ambig}
+## Current working version:
+resolveAmbig <- function(x) {
+    res <- GET(paste0("https://taxonomy.jgi-psf.org/id/ancestor/", x, collapse = ""))
+    status <- res[["status_code"]]
+    if(status == 200) {
+      dat <- fromJSON(rawToChar(res$content))
+      tax_ID <- dat[["tax_id"]]
+      name <- dat[["name"]]
+      level <- dat[["level"]]
+      strain <- dat[["strain"]][["name"]]
+      species <- dat[["species"]][["name"]]
+      species_group <- dat[["species group"]][["name"]]
+      subgenus <- dat[["subgenus"]][["name"]]
+      genus <- dat[["genus"]][["name"]]
+      subfamily <- dat[["subfamily"]][["name"]]
+      family <- dat[["family"]][["name"]]
+      order <- dat[["order"]][["name"]]
+      subclass <- dat[["subclass"]][["name"]]
+      class <- dat[["class"]][["name"]]
+      phylum <- dat[["phylum"]][["name"]]
+      no_rank <- dat[["no rank"]][["name"]]
+      no_rank_2 <- dat[["no rank 2"]][["name"]]
+      kingdom <- dat[["kingdom"]][["name"]]
+      superkingdom <- dat[["superkingdom"]][["name"]]
+      lca <- paste(tax_ID, name, level, strain, species, species_group, subgenus, genus,
+                    subfamily, family, order, subclass, class, phylum, no_rank, 
+                    no_rank_2, kingdom, superkingdom, sep = "; ")
+    }
+    else {
+      lca <- "status error"
+    }
+  return(lca)
+}
+```
+  
+  
+##### Execute modified function for ambiguous taxonomy  
+  
+```{r}
+## Find the LCA of the two most abundant potential parent taxIDs
+annot.mod.lineage.mod <- annot.mod.lineage %>%
+  filter(str_detect(top1_taxID, "ambig_")) %>%
+  dplyr::select(peptide, n_pp, nd.taxID, top1_taxID, top1_taxID_Pct, top2_taxID, top2_taxID_Pct) %>%
+  mutate(taxID_1 = as.character(gsub("ambig_([0-9]+)", "\\1", top1_taxID)),
+         taxID_2 = as.character(gsub("ambig_([0-9]+)", "\\1", top2_taxID))) %>%
+  unite("tied_taxIDs", taxID_1, taxID_2, sep = ",", remove = TRUE, na.rm = FALSE) %>%
+  mutate(top1_taxID = tied_taxIDs, top2_taxID = tied_taxIDs) %>%
+  mutate(lca_lineage = as.character(lapply(tied_taxIDs, resolveAmbig))) %>%
+  separate(., lca_lineage, c("top1_taxID_chk", "top1_name", "top1_level", "top1_strain", 
+                               "top1_species", "top1_species_group", "top1_subgenus", 
+                               "top1_genus", "top1_subfamily", "top1_family", "top1_order", 
+                               "top1_subclass", "top1_class", "top1_phylum", "top1_no_rank", 
+                               "top1_no_rank_2", "top1_kingdom", "top1_superkingdom"), 
+            sep=";", remove=TRUE, extra = "warn", fill = "warn") %>%
+  ## Populate same values for secondary taxonomy (yes, this is redundant)
+  mutate(top2_taxID_chk = top1_taxID_chk, top2_name = top1_name, top2_level = top1_level, 
+         top2_strain = top1_strain, top2_species = top1_species, top2_species_group = top1_species_group,
+         top2_subgenus = top1_subgenus, top2_genus = top1_genus, top2_subfamily = top1_subfamily,
+         top2_family = top1_family, top2_order = top1_order, top2_subclass = top1_subclass,
+         top2_class = top1_class, top2_phylum = top1_phylum, top2_no_rank = top1_no_rank,
+         top2_no_rank_2 = top1_no_rank_2, top2_kingdom = top1_kingdom, top2_superkingdom = top1_superkingdom) %>%
+    mutate(top1_superkingdom = ifelse(top1_taxID_chk == 1, "Life", top1_superkingdom),
+           top2_superkingdom = ifelse(top2_taxID_chk == 1, "Life", top2_superkingdom)) %>%
+  dplyr::select(!tied_taxIDs)
+  
+ 
+## Join revised taxonomy for ambiguous peptides with taxonomy for other peptides
+annot.mod.lineage.resolv <- annot.mod.lineage %>%
+  filter(str_detect(top1_taxID, "ambig_")) %>%
+  dplyr::select(peptide, nd.protID, top1_function, top1_function_Pct, top2_function, top2_function_Pct, top1_description, top1_description_Pct, top2_description, top2_description_Pct, top1_ko, top1_ko_Pct, top2_ko, top2_ko_Pct) %>%
+  left_join(., annot.mod.lineage.mod, by = "peptide")
+
+annot.mod.lineage.resolv <- annot.mod.lineage %>%
+  anti_join(., annot.mod.lineage.resolv, by = "peptide") %>%
+  bind_rows(., annot.mod.lineage.resolv) %>% 
+  mutate_if(is.character, trimws)
+
+###### write output to file ######
+write.table(annot.mod.lineage.resolv, file = paste("./output/annot_mod_lineage_resolved_",format(Sys.time(), "%Y-%m-%d"),".txt", sep = ""), quote = FALSE, row.names = FALSE, sep = "\t")
+
+```
+  
+    
+
+
+
+
