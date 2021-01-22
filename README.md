@@ -1,4 +1,4 @@
-##Community Proteome Annotation: Identifying possible parent proteins and consolidating annotations
+#Community Proteome Annotation: Identifying possible parent proteins and consolidating annotations
 
 AEZ
 
