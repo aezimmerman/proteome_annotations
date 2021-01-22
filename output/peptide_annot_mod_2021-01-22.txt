@@ -1,0 +1,38 @@
+peptide	n_pp	nd.protID	nd.taxID	top1_taxID	top1_taxID_Pct	top2_taxID	top2_taxID_Pct	top1_function	top1_function_Pct	top2_function	top2_function_Pct	top1_description	top1_description_Pct	top2_description	top2_description_Pct	top1_ko	top1_ko_Pct	top2_ko	top2_ko_Pct
+AADVGADLVGK	3	3	3	ambig_187145	33.33	ambig_2026760	33.33	V-type H(+)-translocating pyrophosphatase	66.67	unknown	33.33	ambig_hypothetical protein [Marinimicrobia bacterium SCGC AB-629-J13]	33.33	ambig_V-type H(+)-translocating pyrophosphatase [Ardenticatena maritima].	33.33	K15987	100	NA	0
+ADVVLALGTR	1	1	1	454162	100	NA	0	sulfoacetaldehyde acetyltransferase	100	NA	0	sulfoacetaldehyde acetyltransferase [Kiloniella laminariae].	100	NA	0	K03852	100	NA	0
+AGLQFPVGR	1	1	1	470	100	NA	0	histone H2A-like	100	NA	0	PREDICTED: histone H2A-like [Hydra vulgaris].	100	NA	0	NA	100	NA	0
+DAVTYTEHAK	1	1	1	33208	100	NA	0	unknown	100	NA	0	predicted protein [Nematostella vectensis].	100	NA	0	K11254	100	NA	0
+DNLQGLTKPALR	1	1	1	33208	100	NA	0	unknown	100	NA	0	predicted protein [Nematostella vectensis].	100	NA	0	K11254	100	NA	0
+DVSGEGVQQALLK	3	3	3	ambig_193	33.33	ambig_292806	33.33	ATP-dependent Clp protease ATP-binding subunit ClpX	66.67	ATP-dependent protease ATP-binding subunit ClpX	33.33	ambig_ATP-dependent Clp protease ATP-binding subunit ClpX [Thermoanaerobacter ethanolicus].	33.33	ambig_ATP-dependent protease ATP-binding subunit ClpX [Rhodospirillum rubrum ATCC 11170].	33.33	K03544	100	NA	0
+EAYPGDVFYLHSR	3	3	2	2026760	66.67	28080	33.33	unknown	66.67	NA	33.33	hypothetical protein [Marinimicrobia bacterium SCGC AB-629-J13]	66.67	NA	33.33	K02111	66.67	NA	33.33
+FATSDLNDLYR	1	1	1	1639882	100	NA	0	DNA-directed RNA polymerase subunit beta', partial	100	NA	0	DNA-directed RNA polymerase subunit beta', partial [Gemmatimonadetes bacterium SCGC AAA240-J22]	100	NA	0	K03046	100	NA	0
+FLHLTLK	1	1	1	1379270	100	NA	0	L-asparaginase	100	NA	0	L-asparaginase [Gemmatimonas phototrophica].	100	NA	0	K01424	100	NA	0
+FTQAGSEVSALLGR	2	2	2	ambig_1855912	50	ambig_2026760	50	ambig_ATP synthase subunit beta	50	ambig_F0F1 ATP synthase subunit beta	50	ambig_ATP synthase subunit beta [Thermoanaerobaculum aquaticum].	50	ambig_F0F1 ATP synthase subunit beta [Marinimicrobia bacterium SCGC AB-629-J13]	50	K02112	100	NA	0
+GEVLSSTFDEPAQR	1	1	1	35801	100	NA	0	transcription termination factor Rho	100	NA	0	transcription termination factor Rho [Nitrospina sp. SCGC AAA288-L16]	100	NA	0	K03628	100	NA	0
+GLLAADESTGTLGK	1	1	1	2606216	100	NA	0	fructose-bisphosphate aldolase	100	NA	0	fructose-bisphosphate aldolase [Parvibaculum lavamentivorans].	100	NA	0	K01623	100	NA	0
+GTPGFSGADLANLVNEAALLAAR	1	1	1	2594003	100	NA	0	ATP-dependent metalloprotease	100	NA	0	ATP-dependent metalloprotease [Rhodospirillum centenum].	100	NA	0	K03798	100	NA	0
+GVLLVGPPGTGK	1	1	1	166501	100	NA	0	unknown	100	NA	0	hypothetical protein [Chloroflexi bacterium SCGC AB-629-P13]	100	NA	0	K03798	100	NA	0
+HYAHVDCPGHADYLK	1	1	1	2601677	100	NA	0	elongation factor Tu	100	NA	0	elongation factor Tu [Chloroflexi bacterium SCGC AB-629-P13]	100	NA	0	K02358	100	NA	0
+KTVTAMDVVYALK	1	1	1	33208	100	NA	0	unknown	100	NA	0	predicted protein [Nematostella vectensis].	100	NA	0	K11254	100	NA	0
+LGLFGGAGVGK	1	1	1	1855912	100	NA	0	ATP synthase subunit beta	100	NA	0	ATP synthase subunit beta [Thermoanaerobaculum aquaticum].	100	NA	0	K02112	100	NA	0
+LLANEFTTYR	1	1	1	198252	100	NA	0	sugar ABC transporter substrate-binding protein	100	NA	0	sugar ABC transporter substrate-binding protein [SAR324 cluster bacterium SCGC AAA001-C10].	100	NA	0	NA	100	NA	0
+LQGLTKPALR	1	1	1	33208	100	NA	0	unknown	100	NA	0	predicted protein [Nematostella vectensis].	100	NA	0	K11254	100	NA	0
+LQVAALSANPAEFSAK	1	1	1	198252	100	NA	0	sugar ABC transporter substrate-binding protein	100	NA	0	sugar ABC transporter substrate-binding protein [SAR324 cluster bacterium SCGC AAA001-C10].	100	NA	0	NA	100	NA	0
+LSGLLYEETR	1	1	1	33208	100	NA	0	unknown	100	NA	0	predicted protein [Nematostella vectensis].	100	NA	0	K11254	100	NA	0
+NPATGETLQLAAK	1	1	1	870903	100	NA	0	NA	100	NA	0	NA	100	NA	0	NA	100	NA	0
+NPVDHPHGGGEGK	2	2	2	ambig_1855912	50	ambig_2026760	50	50S ribosomal protein L2	100	NA	0	ambig_50S ribosomal protein L2 [bacterium UASB14].	50	ambig_50S ribosomal protein L2 [Marinimicrobia bacterium JGI 0000113-D11]	50	K02886	100	NA	0
+PGPVLLDLPK	2	2	2	ambig_61435	50	ambig_1898112	50	ambig_acetolactate synthase, large subunit, biosynthetic type	50	ambig_unknown	50	ambig_acetolactate synthase, large subunit, biosynthetic type [Magnetospira sp. QH-2].	50	ambig_hypothetical protein [Chloroflexi bacterium SCGC AB-629-P13]	50	K01652	100	NA	0
+PGPVLVDLPK	1	1	1	504483	100	NA	0	acetolactate synthase	100	NA	0	acetolactate synthase [SAR324 cluster bacterium JCVI-SC AAA005]	100	NA	0	K01652	100	NA	0
+SADVGADLVGK	1	1	1	930805	100	NA	0	sodium-translocating pyrophosphatase	100	NA	0	sodium-translocating pyrophosphatase [marine gamma proteobacterium HTCC2080].	100	NA	0	K15987	100	NA	0
+SFLSAASFQETTR	1	1	1	1639882	100	NA	0	DNA-directed RNA polymerase subunit beta', partial	100	NA	0	DNA-directed RNA polymerase subunit beta', partial [Gemmatimonadetes bacterium SCGC AAA240-J22]	100	NA	0	K03046	100	NA	0
+TALAEGLAQR	1	1	1	552810	100	NA	0	Clp protease ATP-binding protein	100	NA	0	Clp protease ATP-binding protein [Dehalogenimonas sp. WBC-2].	100	NA	0	K03696	100	NA	0
+TAVALDALLNQK	1	1	1	2026760	100	NA	0	unknown	100	NA	0	hypothetical protein [Marinimicrobia bacterium SCGC AB-629-J13]	100	NA	0	K02111	100	NA	0
+TLEVLNTDAEGR	1	1	1	2026760	100	NA	0	unknown	100	NA	0	hypothetical protein [Marinimicrobia bacterium SCGC AAA160-B08]	100	NA	0	K01255	100	NA	0
+TVTAMDVVYALK	1	1	1	33208	100	NA	0	unknown	100	NA	0	predicted protein [Nematostella vectensis].	100	NA	0	K11254	100	NA	0
+VAELFEAR	1	1	1	1639882	100	NA	0	DNA-directed RNA polymerase subunit beta', partial	100	NA	0	DNA-directed RNA polymerase subunit beta', partial [Gemmatimonadetes bacterium SCGC AAA240-J22]	100	NA	0	K03046	100	NA	0
+VEAGLPEDDPR	1	1	1	187145	100	NA	0	V-type H(+)-translocating pyrophosphatase	100	NA	0	V-type H(+)-translocating pyrophosphatase [Caldithrix abyssi].	100	NA	0	K15987	100	NA	0
+VFLENVLR	1	1	1	33208	100	NA	0	unknown	100	NA	0	predicted protein [Nematostella vectensis].	100	NA	0	K11254	100	NA	0
+VGVLHSLSGTMALSETTLK	1	1	1	1628392	100	NA	0	urea ABC transporter substrate-binding protein	100	NA	0	urea ABC transporter substrate-binding protein [Hahella ganghwensis].	100	NA	0	K11959	100	NA	0
+VVNPLGQPLDGK	1	1	1	2026760	100	NA	0	unknown	100	NA	0	hypothetical protein [Marinimicrobia bacterium SCGC AB-629-J13]	100	NA	0	K02111	100	NA	0
+YRPGTVALR	1	1	1	45351	100	NA	0	unknown	100	NA	0	hypothetical protein [Escherichia coli].	100	NA	0	K11251;K11253	100	NA	0
